@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Data (large files, downloaded datasets)
+data/raw/
+data/features/
+data/model-artifacts/
+!data/features/.gitkeep
+!data/model-artifacts/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Feast
+feast_repo/
+**/.feast*
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+*.env.local
