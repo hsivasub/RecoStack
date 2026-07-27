@@ -60,7 +60,30 @@ None. This phase is entirely automated and ready for Phase 2.
 - **Extreme sparsity (98.3%)** is typical for recommendation problems — most users have rated only a tiny fraction of all movies. This drives the need for collaborative filtering or hybrid approaches in candidate generation (Phase 5+).
 - **Long-tail item distribution**: median movie has only 3 ratings, while the most popular has 329. Cold-start items (few interactions) will need content-based signals.
 - **Rating distribution is left-skewed** toward positive ratings (mean 3.5), which is standard for explicit feedback datasets.
-- **No cold-start users**: every user has ≥ 20 ratings, so user-based collaborative filtering is viable.
+### Manual Steps Required
+None.
+
+---
+
+## Phase 3 — Architecture Documentation
+**Date**: 2026-07-27
+
+### Files Created
+- `docs/architecture/ARCHITECTURE.md` — Full system architecture document
+
+### Document Contents
+| Section | Description |
+|---|---|
+| Overview | High-level principles (two-stage, feature store, streaming-first, local-only) |
+| Component Responsibility Table | 9 components (Redpanda, Feast, Redis, Training Pipeline, MLflow, FastAPI, Prometheus, Grafana, Docker Compose) with roles, tech, and data ownership |
+| End-to-End Data Flow | Mermaid flowchart covering 4 planes: Ingestion → Feature → Training → Serving, with a walkthrough |
+| Design Decisions | 6 decisions explained with rationale (two-stage, Feast, Redpanda, local-only, LightGBM, Prometheus/Grafana) |
+| Future-Proofing Notes | Where the doc is expected to diverge from reality as we build |
+
+### Key Takeaways
+- The architecture doc serves as a **north star** — every later phase builds toward this design, but we expect it to evolve as implementation reveals practical constraints.
+- Writing architecture before code is standard practice in engineering teams: it forces explicit trade-off reasoning, aligns contributors, and surfaces disagreements early.
+- Specific anticipated divergences: Feast complexity may force simplification, Redpanda may become optional for static data, and service boundaries may merge.
 
 ### Manual Steps Required
 None.

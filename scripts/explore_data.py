@@ -43,7 +43,7 @@ def explore_ratings(ratings: pd.DataFrame) -> None:
     sparsity_pct = (1 - n_ratings / possible_entries) * 100
 
     print(SEPARATOR)
-    print("📊  RATINGS DATASET OVERVIEW")
+    print("RATINGS DATASET OVERVIEW")
     print(SEPARATOR)
     print(f"  Number of ratings:     {n_ratings:>10,}")
     print(f"  Number of users:       {n_users:>10,}")
@@ -55,7 +55,7 @@ def explore_ratings(ratings: pd.DataFrame) -> None:
     print()
 
     print(SEPARATOR)
-    print("📈  RATING DISTRIBUTION")
+    print("RATING DISTRIBUTION")
     print(SEPARATOR)
     for rating, count in dist.items():
         bar = "█" * int(count / dist.max() * 30)
@@ -66,7 +66,7 @@ def explore_ratings(ratings: pd.DataFrame) -> None:
     print()
 
     print(SEPARATOR)
-    print("👤  ACTIONS PER USER (ratings per user)")
+    print("ACTIONS PER USER (ratings per user)")
     print(SEPARATOR)
     rpu = ratings.groupby("userId").size()
     print(f"  Min ratings per user:  {rpu.min():>6,}")
@@ -77,7 +77,7 @@ def explore_ratings(ratings: pd.DataFrame) -> None:
     print()
 
     print(SEPARATOR)
-    print("🎬  ACTIONS PER ITEM (ratings per movie)")
+    print("ACTIONS PER ITEM (ratings per movie)")
     print(SEPARATOR)
     rpi = ratings.groupby("movieId").size()
     print(f"  Min ratings per movie:  {rpi.min():>6,}")
@@ -90,7 +90,7 @@ def explore_movies(movies: pd.DataFrame) -> None:
     """Print key statistics for the movies dataset."""
     print()
     print(SEPARATOR)
-    print("🎞️  MOVIES DATASET OVERVIEW")
+    print("MOVIES DATASET OVERVIEW")
     print(SEPARATOR)
     print(f"  Total movies:    {len(movies):>10,}")
 
@@ -111,7 +111,7 @@ def main() -> None:
     explore_movies(movies)
     print()
     print(SEPARATOR)
-    print("✅  Exploration complete.")
+    print("Exploration complete.")
 
 
 if __name__ == "__main__":
