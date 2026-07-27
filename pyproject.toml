@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "RecoStack Contributors"},
+    {name = "Harish Siva Subramanian"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -80,11 +80,10 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.2.0",
     "pre-commit>=3.6.0",
-    "recostack[all]",
-]
     "ipython>=8.18.0",
     "jupyter>=1.0.0",
     "notebook>=7.0.0",
+    "recostack[all]",
 ]
 
 [tool.setuptools.packages.find]
