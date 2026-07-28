@@ -1,0 +1,31 @@
+# RecoStack — Redpanda Single-Node Configuration
+# Used by the official Redpanda container image.
+
+redpanda:
+  data_directory: /var/lib/redpanda/data
+  node_id: 0
+  seed_servers:
+    - host:
+        address: localhost
+        port: 33145
+  rpc_server:
+    address: 0.0.0.0
+    port: 33145
+
+  kafka_api:
+    - address: 0.0.0.0
+      port: 9092
+
+  admin:
+    - address: 0.0.0.0
+      port: 9644
+
+  advertised_kafka_api:
+    - address: 127.0.0.1
+      port: 9092
+
+  developer_mode: true
+
+  # Retain events for 7 days, then compact + delete
+  log_retention_ms: 604800000
+  log_retention_bytes: 1073741824  # 1 GB per partition

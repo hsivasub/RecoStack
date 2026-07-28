@@ -87,3 +87,53 @@ None.
 
 ### Manual Steps Required
 None.
+
+---
+
+## Phase 4 — Event Streaming Backbone (Redpanda)
+**Date**: 2026-07-28
+
+### Files Created
+- `config/redpanda/redpanda.yaml` — Minimal single-node Redpanda config (port 9092 Kafka API, 9644 admin, developer mode, 7-day retention, 1 GB partition cap)
+- `docker/kafka/init-topics.sh` — Shell script to create the `user-events` topic (3 partitions, 1 replica) via `rpk`
+- `docker/kafka/README.md` — Documents using the official Redpanda image directly (no ZooKeeper, no Confluent wrapper)
+
+### Why Redpanda Over Apache Kafka
+| Factor | Redpanda | Apache Kafka |
+|--------|----------|-------------|
+| JVM required | No (C++) | Yes |
+| ZooKeeper | None | Required |
+| Single binary | Yes | No (broker + ZK + connect) |
+| Kafka API | 100% compatible | Native |
+| Developer mode | Yes (`--developer-mode`) | No equivalent |
+
+The `user-events` topic will carry all user interaction events (ratings, clicks, purchases) from the API layer to:
+- Feast offline store (batch feature computation → Phase 7)
+- Real-time feature pipeline (online features → Phase 8)
+- Future analytics consumers
+
+### Standalone Test Command
+```bash
+docker run -d --name redpanda \
+  -p 9092:9092 \
+  -p 9644:9644 \
+  -v redpanda-data:/var/lib/redpanda/data \
+  -v ./config/redpanda/redpanda.yaml:/etc/redpanda/redpanda.yaml:ro \
+  docker.redpanda.com/redpandadata/redpanda:latest \
+  redpanda start --config /etc/redpanda/redpanda.yaml --developer-mode
+```
+
+Create topics: `docker exec redpanda rpk topic create user-events --partitions 3 --replicas 1`
+Produce test: `docker exec -it redpanda rpk topic produce user-events`
+Consume test: `docker exec -it redpanda rpk topic consume user-events --num 10`
+
+### Key Takeaways
+- A message broker decouples producers (user actions) from consumers (feature pipelines, recommenders, analytics) — each reads at its own pace.
+- Redpanda's single-binary, no-ZK model makes local dev trivial vs. classic Kafka.
+- Event streams enable replay: if a feature bug is found, we can rewind and reprocess historical events.
+- Full Docker Compose orchestration (tying Redpanda to other services) comes in Phase 11.
+
+### Manual Steps Required
+1. Run the `docker run` command above to start Redpanda
+2. Run `docker exec redpanda rpk topic create user-events --partitions 3 --replicas 1`
+3. (Optional) Produce a test message and verify consumption via the `rpk topic consume` command
