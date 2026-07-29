@@ -17,8 +17,11 @@ Apache Kafka with zero ZooKeeper dependency, lower latency, and a single binary.
   without code changes.
 - **Single binary** — no ZooKeeper, no schema registry (unless you want one). This
   drastically simplifies the Docker setup.
-- **Developer mode** — we run with `--developer-mode` which disables production
-  safeguards (data durability, fsync) — ideal for local dev, *not* for production.
+- **Developer mode** — we run with `--mode dev-container` which sets safe single-node
+  defaults and enables developer mode. **Do not** mount a custom `redpanda.yaml`
+  into `/etc/redpanda/` — the container's entrypoint (non-root UID 101) cannot
+  `chown` temp copies in that directory. Use CLI flags or env vars for overrides
+  in standalone mode.
 
 ## Files
 

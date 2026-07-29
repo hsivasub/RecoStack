@@ -114,18 +114,20 @@ The `user-events` topic will carry all user interaction events (ratings, clicks,
 
 ### Standalone Test Command
 ```bash
+# Start Redpanda (no config file mount needed — --mode dev-container sets defaults)
 docker run -d --name redpanda \
   -p 9092:9092 \
   -p 9644:9644 \
   -v redpanda-data:/var/lib/redpanda/data \
-  -v ./config/redpanda/redpanda.yaml:/etc/redpanda/redpanda.yaml:ro \
   docker.redpanda.com/redpandadata/redpanda:latest \
-  redpanda start --config /etc/redpanda/redpanda.yaml --developer-mode
+  redpanda start --mode dev-container --check=false
 ```
 
 Create topics: `docker exec redpanda rpk topic create user-events --partitions 3 --replicas 1`
-Produce test: `docker exec -it redpanda rpk topic produce user-events`
-Consume test: `docker exec -it redpanda rpk topic consume user-events --num 10`
+Produce test: `Write-Output '{"user_id":1,"movie_id":42,"rating":4.5}' | docker exec -i redpanda rpk topic produce user-events`
+Consume test: `docker exec redpanda rpk topic consume user-events --num 1`
+
+> **⚠️ Mounting a custom `redpanda.yaml`** with `:ro` into `/etc/redpanda/` causes startup failure — the container's entrypoint (running as non-root UID 101) tries to `chown` a temp copy of the config and can't. For standalone dev, use `--mode dev-container` instead. The full Docker Compose file in Phase 11 will handle config via environment variables.
 
 ### Key Takeaways
 - A message broker decouples producers (user actions) from consumers (feature pipelines, recommenders, analytics) — each reads at its own pace.
