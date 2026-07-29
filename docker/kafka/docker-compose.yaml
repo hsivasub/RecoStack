@@ -1,0 +1,70 @@
+# RecoStack — Local streaming stack (Redpanda + Console)
+#
+# Usage:
+#   docker compose -f docker/kafka/docker-compose.yaml up -d
+#
+# First run: creates the "user-events" topic automatically via init-topics.sh.
+#
+# If you already have the standalone "redpanda" container running from Phase 4:
+#   1. docker rm -f redpanda              # remove old container (data survives in the volume)
+#   2. docker compose -f docker/kafka/docker-compose.yaml up -d
+#
+# Console is available at  http://localhost:8080
+
+volumes:
+  redpanda-data:
+    name: redpanda-data
+    external: true       # picks up the existing volume from Phase 4 so data is preserved
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    ports:
+      - "9092:9092"      # Kafka API
+      - "9644:9644"      # Admin API (used by Console)
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --check=false
+      - --advertise-kafka-addr
+      - redpanda:9092
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health 2>&1 | grep -q 'Healthy: *true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda-console
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # One-shot job: creates the user-events topic after Redpanda is healthy
+  init-topics:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda-init-topics
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for broker ..."
+        rpk cluster health --exit-when-healthy --timeout 30s
+        echo "Creating topic user-events ..."
+        rpk topic create user-events --partitions 3 --replicas 1
+        echo "Done."
+    network_mode: service:redpanda
