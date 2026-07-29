@@ -139,3 +139,52 @@ Consume test: `docker exec redpanda rpk topic consume user-events --num 1`
 1. Run the `docker run` command above to start Redpanda
 2. Run `docker exec redpanda rpk topic create user-events --partitions 3 --replicas 1`
 3. (Optional) Produce a test message and verify consumption via the `rpk topic consume` command
+
+---
+
+## Phase 5 — Simulated Live Event Stream
+**Date**: 2026-07-29
+
+### Files Created
+- `scripts/data_generator.py` — Reads historical MovieLens ratings and replays them as JSON events to the `user-events` Redpanda topic
+
+### Usage
+```bash
+# Stream at 10 events per second (default)
+python scripts/data_generator.py
+
+# Stream at 100 events per second
+python scripts/data_generator.py --rate 100
+
+# Stream in real-time (paced by original timestamps)
+python scripts/data_generator.py --rate realtime
+
+# Stream only the first 50 events
+python scripts/data_generator.py --rate 50 --max-events 50
+```
+
+### Event Schema
+```json
+{
+  "event_type": "rating",
+  "user_id": 1,
+  "movie_id": 1,
+  "rating": 4.0,
+  "timestamp": 964982703,
+  "datetime": "2000-08-01T00:00:00+00:00"
+}
+```
+
+### Verification
+- Successfully produced 20 test events, then all 100,836 ratings to `user-events`
+- Events confirmed across all 3 partitions via `rpk topic consume`
+- Average throughput: ~370 evt/s over the network
+- kafka-python 3.x required `acks=1` (int) not `acks="1"` (string) — subtle API difference
+
+### Key Takeaways
+- Replaying historical data as a live stream is a standard testing strategy for streaming systems — it exercises the same pipeline code, the same consumer groups, and the same infrastructure as real traffic, without needing real users.
+- In production, user events arrive sporadically with unpredictable inter-arrival times. The generator simulates this via `--rate` (fixed pacing) or `--rate realtime` (original timestamps).
+- A data generator like this is also used for load testing, integration tests, and demo environments. Most streaming systems have a version of this pattern (e.g., `kafka-producer-perf-test`, Redpanda's own `rpk topic produce`).
+
+### Manual Steps Required
+None. The generator can be run whenever Redpanda is up and the `user-events` topic exists.
