@@ -188,3 +188,44 @@ python scripts/data_generator.py --rate 50 --max-events 50
 
 ### Manual Steps Required
 None. The generator can be run whenever Redpanda is up and the `user-events` topic exists.
+
+---
+
+## Phase 6 — Experiment Tracking with MLflow
+**Date**: 2026-07-31
+
+### Files Created
+- `config/mlflow/settings.env` — Environment variables for the MLflow Tracking Server (SQLite backend, local artifact root)
+- `docker/mlflow/Dockerfile` — Multi-purpose MLflow server image (python:3.12-slim, exposes 5000)
+- `scripts/mlflow_smoke_test.py` — End-to-end connectivity test logging a dummy run
+
+### Usage
+```bash
+# Build the image
+docker build -t recostack-mlflow -f docker/mlflow/Dockerfile .
+
+# Run the server
+docker run -d --name mlflow ^
+  -p 5000:5000 ^
+  -v mlflow-data:/mlflow ^
+  --env-file config/mlflow/settings.env ^
+  recostack-mlflow
+
+# Open the UI
+start http://localhost:5000
+```
+
+### Verification
+- MLflow server started on `http://localhost:5000` and confirmed via browser
+- Logged two runs to the `phase-6-smoke-test` experiment with dummy params/metrics (`dummy_rmse`, `dummy_precision`)
+- Runs visible in the MLflow UI at `http://localhost:5000/#/experiments/1`
+- Artifacts stored in the `mlflow-data` Docker volume at `/mlflow/artifacts/`
+- Metadata stored in SQLite at `/mlflow/mlflow.db` (inside the volume)
+
+### Key Takeaways
+- **Model Registry** is a central catalog of all trained models with versioning, stage transitions (Staging → Production → Archived), lineage metadata (who trained it, on what data, with which hyperparams), and deployment annotations. Without one, answering "which exact model + data + params produced this result" becomes a hard problem because: (1) files get overwritten, (2) the same script run a week later produces different weights, (3) team members pick different random seeds, (4) no one remembers which training commit was used. MLflow's Tracking Server is the foundation — the registry layer comes when we actually train models (Phase 7+).
+- The `sys.stdout.reconfigure(encoding="utf-8")` workaround was needed because MLflow prints a 🏃 emoji in its run URL, which crashes on Windows cp1252 terminals. This is a known MLflow-on-Windows friction point.
+- SQLite is sufficient for single-user local dev (no separate DB server needed). For multi-user, swap to PostgreSQL via `MLFLOW_BACKEND_STORE_URI`.
+
+### Manual Steps Required
+None. The server is running at localhost:5000. Rebuild the image only if MLflow needs an upgrade.
