@@ -1,0 +1,24 @@
+# Feast Feature Store Configuration — RecoStack
+#
+# Reference: https://docs.feast.dev/reference/feature-store-yaml
+#
+# This config points Feast to:
+#   - Offline store: local Parquet files (data/features/)
+#   - Online store: Redis (localhost:6379)
+#   - Registry: SQLite (data/feast/registry.db)
+
+project: recostack
+provider: local
+
+registry:
+  registry_type: sql
+  path: sqlite:///C:/Users/Harish/VSCode_Projects/Github/RecoStack/data/feast/registry.db
+
+online_store:
+  type: redis
+  connection_string: "localhost:6379"
+
+offline_store:
+  type: file
+
+entity_key_serialization_format: json

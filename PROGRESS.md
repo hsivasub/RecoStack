@@ -229,3 +229,42 @@ start http://localhost:5000
 
 ### Manual Steps Required
 None. The server is running at localhost:5000. Rebuild the image only if MLflow needs an upgrade.
+
+---
+
+## Phase 7 — Feature Store Setup (Feast)
+**Date**: 2026-08-20
+
+### Files Created/Changed
+- `config/feast/feature_store.yaml` — Feast repo config (SQLite registry, Redis online store, Parquet offline store)
+- `src/feast/entities.py` — Entity definitions (`user` with `join_keys=["user_id"]`, `movie` with `join_keys=["movie_id"]`)
+- `src/feast/sources.py` — Data source definitions pointing to Parquet files in `data/features/`
+- `src/feast/feature_views.py` — Three feature views (`user_stats`, `movie_stats`, `interactions`)
+- `scripts/generate_feature_data.py` — Computes aggregate features from raw CSV → Parquet
+- `scripts/apply_feast.py` — Registers all entities, sources, and feature views in the Feast registry
+
+### Feature Views Registered
+
+| Feature View | Entity | Features | Source |
+|---|---|---|---|
+| `user_stats` | user | `avg_rating`, `rating_count`, `rating_stddev`, `unique_genres_rated` | `data/features/user_stats.parquet` |
+| `movie_stats` | movie | `avg_rating`, `rating_count`, `rating_stddev`, `genres` | `data/features/movie_stats.parquet` |
+| `interactions` | user + movie | `rating`, `timestamp` | `data/features/interactions.parquet` |
+
+### Verification
+- **Feature generation**: 610 users, 9,724 movies, 100,836 interactions written as Parquet
+- **Feast apply**: 3 feature views + 2 entities registered in SQLite registry
+- **Historical retrieval**: All three feature views queried successfully via `get_historical_features()`
+  - `user_stats` for user 1: avg_rating=3.95, rating_count=232, rating_stddev=0.80
+  - `movie_stats` for movie 1 (Toy Story): genres=Adventure|Animation|Children|Comedy|Fantasy
+  - `interactions` for user 1 + movie 1: rating=4.0, timestamp=964982703
+
+### Key Takeaways
+- **Feast's entity system** requires the entity's `value_type` to match the dtype of the join key column in the feature view schema. We had to align `ValueType.INT64` entities with `Int64` schema fields (not `Int32`).
+- **`join_keys` parameter** on entities is critical — without it, Feast uses the entity name as the join column, which fails when the Parquet column is named `user_id` instead of `user`.
+- **The `apply()` method** requires explicit object lists — `store.apply(objects=[...])` — not a no-arg call.
+- **Registry path** must be a full SQLAlchemy URL (`sqlite:///absolute/path/to/registry.db`), not a plain file path.
+- **Historical retrieval** works with a simple entity DataFrame containing the join key columns and `event_timestamp`. This is the foundation for training data generation in Phase 8.
+
+### Manual Steps Required
+None. Run `python scripts/generate_feature_data.py` to regenerate features, and `python scripts/apply_feast.py` to re-apply the registry if definitions change.
