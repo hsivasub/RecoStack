@@ -88,7 +88,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["api*", "feast*", "recommenders*"]
+include = ["api*", "feature_defs*", "recommenders*"]
 
 [tool.ruff]
 line-length = 100

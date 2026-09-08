@@ -26,8 +26,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from feast import FeatureStore
 
-from src.feast.entities import movie, user
-from src.feast.feature_views import interaction_fv, movie_stats_fv, user_stats_fv
+from src.feature_defs.entities import movie, user
+from src.feature_defs.feature_views import interaction_fv, movie_stats_fv, user_stats_fv
 
 
 def main() -> None:

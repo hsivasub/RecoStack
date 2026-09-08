@@ -12,8 +12,8 @@ Each feature view maps a set of feature columns to an entity via a data source.
 from feast import FeatureView, Field
 from feast.types import Float32, Int32, Int64, String
 
-from src.feast.entities import movie, user
-from src.feast.sources import interaction_source, movie_stats_source, user_stats_source
+from src.feature_defs.entities import movie, user
+from src.feature_defs.sources import interaction_source, movie_stats_source, user_stats_source
 
 # ---------------------------------------------------------------------------
 # User stats feature view

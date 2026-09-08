@@ -268,3 +268,78 @@ None. The server is running at localhost:5000. Rebuild the image only if MLflow 
 
 ### Manual Steps Required
 None. Run `python scripts/generate_feature_data.py` to regenerate features, and `python scripts/apply_feast.py` to re-apply the registry if definitions change.
+
+---
+
+## Phase 8 — Training Pipeline (Candidate Generation + Ranking)
+**Date**: 2026-09-08
+
+### Files Created/Changed
+- `src/recommenders/candidate_generation.py` — SVD-based candidate generation model (TruncatedSVD, 50 latent factors)
+- `src/recommenders/ranking.py` — LightGBM ranking model with pointwise regression (RMSE objective)
+- `src/recommenders/training_pipeline.py` — Orchestrator: Feast feature retrieval → SVD training → LightGBM training → MLflow logging
+- `scripts/train_models.py` — CLI entry point with `--dry-run`, `--svd-factors`, `--lgb-rounds` options
+- `src/recommenders/__init__.py` — Updated with public API exports
+- `scripts/generate_feature_data.py` — Added `unique_genres_rated` feature to user stats
+- `src/feast/` → `src/feature_defs/` — Renamed to avoid shadowing the installed `feast` library
+
+### Architecture
+
+```
+Feast (historical features)
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│         Training Pipeline               │
+│  ┌──────────────────────────────────┐   │
+│  │ Stage 1: SVD Candidate Gen      │   │
+│  │ TruncatedSVD (50 factors)       │   │
+│  │ 610 users × 9,724 movies matrix │   │
+│  │ → Top-100 candidates per user   │   │
+│  └──────────────────────────────────┘   │
+│  ┌──────────────────────────────────┐   │
+│  │ Stage 2: LightGBM Ranking       │   │
+│  │ 12 features (user + movie stats │   │
+│  │ + derived features)             │   │
+│  │ → Score & rank candidates       │   │
+│  └──────────────────────────────────┘   │
+│         ↓                               │
+│  MLflow (params, metrics, artifacts)    │
+└─────────────────────────────────────────┘
+```
+
+### Training Results
+
+| Metric | Value |
+|---|---|
+| SVD training time | 4.5s |
+| SVD training RMSE | 0.8155 |
+| LightGBM training time | 5.1s |
+| LightGBM best iteration | 115 rounds |
+| Validation RMSE | 0.2335 |
+| Validation MAE | 0.1213 |
+| Training rows | 488 |
+| Validation rows | 122 |
+| Feature count | 12 |
+
+### Top-5 Feature Importance (Gain)
+1. **user_deviation** (3,468.7) — User's rating deviation from movie average
+2. **movie_stats__avg_rating** (1,068.4) — Movie's average rating
+3. **user_stats__avg_rating** (63.8) — User's average rating
+4. **movie_stats__rating_stddev** (53.1) — Movie rating variance
+5. **user_stats__rating_stddev** (45.7) — User rating variance
+
+### Key Takeaways
+- **Two-stage architecture works**: SVD narrows 9,724 → ~100 candidates cheaply; LightGBM scores only those 100 with rich features.
+- **user_deviation dominates** feature importance — how much a user's rating differs from the movie's average is the strongest signal. This makes intuitive sense: if a user rates a movie 1.0 when the average is 4.0, that's highly informative.
+- **SVD RMSE of 0.82** is reasonable for 50 factors on a 98.3% sparse matrix. More factors would improve reconstruction but risk overfitting.
+- **LightGBM validation RMSE of 0.23** is excellent — the model generalizes well from 488 training examples.
+- **Feast full_feature_names=True** was required because `user_stats` and `movie_stats` share column names (`avg_rating`, `rating_count`, `rating_stddev`). Feast prefixes them as `user_stats__avg_rating` and `movie_stats__avg_rating`.
+- **Local package naming matters**: `src/feast/` shadows the installed `feast` library. Renamed to `src/feature_defs/`.
+- **MLflow 3.14 on Python 3.14**: The MLflow server has compatibility issues with Python 3.14 (uvicorn multiprocess + importlib.abc.Traversable). Using local SQLite tracking (`sqlite:///`) works reliably.
+
+### Manual Steps Required
+None. Run `python scripts/train_models.py` to re-run the full pipeline. Use `--dry-run` to verify prerequisites without training.
+
+### Next Phase
+Phase 9 — Serving API (FastAPI endpoints for `/recommend` and `/rate`)

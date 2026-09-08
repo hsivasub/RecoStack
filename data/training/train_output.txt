@@ -1,0 +1,214 @@
+﻿============================================================
+RecoStack ù Training Pipeline (Phase 8)
+============================================================
+
+[1/6] Connecting to Feast feature store ...
+[2/6] Retrieving historical features ...
+       Retrieved 610 rows with 13 columns
+
+[3/6] Training SVD candidate generation model ...
+       SVD trained in 4.45s (50 factors)
+       SVD training RMSE: 0.8155
+
+[4/6] Preparing ranking features ...
+       Train: 488 rows, Val: 122 rows
+       Features: 12
+
+[5/6] Training LightGBM ranking model ...
+Training until validation scores don't improve for 20 rounds
+Early stopping, best iteration is:
+[115]	train's rmse: 0.147734	valid's rmse: 0.233473
+       LightGBM trained in 0.06s
+       Val RMSE: 0.2335, Val MAE: 0.1213
+
+       Top-5 feature importance (gain):
+         user_deviation: 3468.67
+         movie_stats__avg_rating: 1068.40
+         user_stats__avg_rating: 63.78
+         movie_stats__rating_stddev: 53.09
+         user_stats__rating_stddev: 45.66
+
+[6/6] Logging to MLflow ...
+python.exe : Traceback (most recent call last):
+At line:1 char:1
++ & "c:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Scripts\pyt ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connection.py", line 204, in _new_conn
+    sock = connection.create_connection(
+        (self._dns_host, self.port),
+    ...<2 lines>...
+        socket_options=self.socket_options,
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\util\connection.py", line 85, in create_connection
+    raise err
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\util\connection.py", line 73, in create_connection
+    sock.connect(sa)
+    ~~~~~~~~~~~~^^^^
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 493, in _make_request
+    conn.request(
+    ~~~~~~~~~~~~^
+        method,
+        ^^^^^^^
+    ...<6 lines>...
+        enforce_content_length=enforce_content_length,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connection.py", line 500, in request
+    self.endheaders()
+    ~~~~~~~~~~~~~~~^^
+  File "C:\Program Files\Python314\Lib\http\client.py", line 1362, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python314\Lib\http\client.py", line 1122, in _send_output
+    self.send(msg)
+    ~~~~~~~~~^^^^^
+  File "C:\Program Files\Python314\Lib\http\client.py", line 1066, in send
+    self.connect()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connection.py", line 331, in connect
+    self.sock = self._new_conn()
+                ~~~~~~~~~~~~~~^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connection.py", line 219, in _new_conn
+    raise NewConnectionError(
+        self, f"Failed to establish a new connection: {e}"
+    ) from e
+urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [WinError 10061] No 
+connection could be made because the target machine actively refused it
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\requests\adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ~~~~~~~~~~~~^
+        method,
+        ^^^^^^^
+    ...<13 lines>...
+        **response_kw,
+        ^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ~~~~~~~~~~~~^
+        method,
+        ^^^^^^^
+    ...<13 lines>...
+        **response_kw,
+        ^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ~~~~~~~~~~~~^
+        method,
+        ^^^^^^^
+    ...<13 lines>...
+        **response_kw,
+        ^^^^^^^^^^^^^^
+    )
+    ^
+  [Previous line repeated 4 more times]
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\urllib3\util\retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: 
+/api/2.0/mlflow/experiments/get-by-name?experiment_name=recostack-training (Caused by NewConnectionError("HTTPConnection(host='localhost', 
+port=5000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused 
+it"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\utils\rest_utils.py", line 294, in http_request
+    return _get_http_response_with_retries(
+        method,
+    ...<10 lines>...
+        **kwargs,
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\utils\request_utils.py", line 282, in 
+_get_http_response_with_retries
+    return session.request(method, url, allow_redirects=allow_redirects, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\requests\sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\requests\sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\requests\adapters.py", line 729, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: 
+/api/2.0/mlflow/experiments/get-by-name?experiment_name=recostack-training (Caused by NewConnectionError("HTTPConnection(host='localhost', 
+port=5000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused 
+it"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\scripts\train_models.py", line 124, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\scripts\train_models.py", line 116, in main
+    results = run_training_pipeline(config)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\src\recommenders\training_pipeline.py", line 305, in run_training_pipeline
+    _log_to_mlflow(
+    ~~~~~~~~~~~~~~^
+        config=config,
+        ^^^^^^^^^^^^^^
+    ...<8 lines>...
+        importance=importance,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\src\recommenders\training_pipeline.py", line 393, in _log_to_mlflow
+    mlflow.set_experiment(config.experiment_name)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\tracking\fluent.py", line 209, in set_experiment
+    experiment = client.get_experiment_by_name(experiment_name)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\tracking\_tracking_service\client.py", line 282, in 
+get_experiment_by_name
+    return self.store.get_experiment_by_name(name)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\store\tracking\rest_store.py", line 1433, in 
+get_experiment_by_name
+    response_proto = self._call_endpoint(GetExperimentByName, req_body)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\store\tracking\rest_store.py", line 266, in 
+_call_endpoint
+    return call_endpoint(
+        self.get_host_creds(),
+    ...<4 lines>...
+        retry_timeout_seconds=retry_timeout_seconds,
+    )
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\utils\rest_utils.py", line 667, in call_endpoint
+    response = http_request(**call_kwargs)
+  File "C:\Users\Harish\VSCode_Projects\Github\RecoStack\.venv\Lib\site-packages\mlflow\utils\rest_utils.py", line 317, in http_request
+    raise MlflowException(f"API request to {url} failed with exception {e}")
+mlflow.exceptions.MlflowException: API request to http://localhost:5000/api/2.0/mlflow/experiments/get-by-name failed with exception 
+HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: 
+/api/2.0/mlflow/experiments/get-by-name?experiment_name=recostack-training (Caused by NewConnectionError("HTTPConnection(host='localhost', 
+port=5000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused 
+it"))

@@ -52,8 +52,11 @@ def load_movies() -> pd.DataFrame:
     return df
 
 
-def compute_user_stats(ratings: pd.DataFrame) -> pd.DataFrame:
-    """Compute per-user aggregate features."""
+def compute_user_stats(ratings: pd.DataFrame, movies: pd.DataFrame) -> pd.DataFrame:
+    """Compute per-user aggregate features including unique genres rated."""
+    # Merge ratings with movies to get genre info
+    ratings_with_genres = ratings.merge(movies[["movieId", "genres"]], on="movieId")
+
     stats = (
         ratings.groupby("userId")
         .agg(
@@ -68,6 +71,18 @@ def compute_user_stats(ratings: pd.DataFrame) -> pd.DataFrame:
     stats["rating_stddev"] = stats["rating_stddev"].fillna(0.0).astype(np.float32)
     stats["rating_count"] = stats["rating_count"].astype(np.int32)
     stats["user_id"] = stats["user_id"].astype(np.int64)
+
+    # Compute unique genres rated per user
+    unique_genres = (
+        ratings_with_genres.groupby("userId")["genres"]
+        .apply(lambda g: len(set("|".join(g).split("|"))))
+        .reset_index()
+    )
+    unique_genres.columns = ["user_id", "unique_genres_rated"]
+    unique_genres["user_id"] = unique_genres["user_id"].astype(np.int64)
+
+    stats = stats.merge(unique_genres, on="user_id", how="left")
+    stats["unique_genres_rated"] = stats["unique_genres_rated"].fillna(0).astype(np.int32)
     return stats
 
 
@@ -140,7 +155,7 @@ def main() -> None:
 
     # Compute features
     print("[3/5] Computing user stats ...")
-    user_stats = compute_user_stats(ratings)
+    user_stats = compute_user_stats(ratings, movies)
     user_stats = add_feast_columns(user_stats)
     user_stats.to_parquet(USER_STATS_OUT, index=False)
     print(f"       {len(user_stats):,} users → {USER_STATS_OUT}")
