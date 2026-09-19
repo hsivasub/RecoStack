@@ -343,3 +343,77 @@ None. Run `python scripts/train_models.py` to re-run the full pipeline. Use `--d
 
 ### Next Phase
 Phase 9 — Serving API (FastAPI endpoints for `/recommend` and `/rate`)
+
+---
+
+## Phase 9 — Serving API (FastAPI)
+**Date**: 2026-09-18
+
+### Files Created
+- `src/api/models.py` — Pydantic request/response schemas (`RatingEvent`, `RecommendRequest`, `RecommendResponse`, `RatingResponse`, `HealthResponse`, `MovieInfo`)
+- `src/api/feature_service.py` — Online feature retrieval with Feast Redis backend + Parquet fallback
+- `src/api/recommend_service.py` — Two-stage inference orchestrator (SVD → LightGBM)
+- `src/api/event_producer.py` — Redpanda event producer for rating events (graceful degradation)
+- `src/api/app.py` — FastAPI application with `/health`, `/recommend`, `/rate` endpoints
+- `scripts/run_api.py` — CLI entry point for `uvicorn`
+
+### Architecture
+
+```
+┌─────────────┐     ┌─────────────────────────────────────────────┐
+│  Client     │     │           FastAPI Server (:8000)            │
+│             │     │                                             │
+│ GET /recommend ──→│  RecommendService                           │
+│             │     │  ├── SVDCandidateGenerator (loaded .pkl)    │
+│             │     │  ├── LightGBMRanker (loaded .txt)           │
+│             │     │  └── FeatureService                         │
+│             │     │      ├── Feast online store (Redis)         │
+│             │     │      └── Parquet fallback                   │
+│             │     │                                             │
+│ POST /rate  ──→│  EventProducer                                 │
+│             │     │  └── Redpanda topic `user-events`           │
+│             │     │      (or local log fallback)                │
+└─────────────┘     └─────────────────────────────────────────────┘
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check — models loaded, Redpanda connected, Feast available |
+| GET | `/recommend?user_id=X&top_k=N` | Top-K recommendations (SVD → LightGBM) |
+| POST | `/rate` | Submit a rating event (published to Redpanda) |
+| GET | `/docs` | Interactive Swagger UI |
+
+### Inference Flow (`/recommend`)
+
+1. **SVD candidate generation**: `get_candidates(user_id, n_candidates=100)` — dot product of user embedding with all item embeddings, returns top-100 movie IDs
+2. **Feature assembly**: Fetch user stats from `FeatureService` + movie stats for each candidate from Parquet/Feast; compute derived features (`user_deviation`, `movie_popularity_log`, `user_activity_log`, `genre_count`)
+3. **LightGBM scoring**: `predict(feature_df)` → scores for all candidates
+4. **Rank & return**: Sort by score descending, return top-K with movie title/genres
+
+### Graceful Degradation
+
+| Component | Unavailable Behavior |
+|-----------|---------------------|
+| **Feast/Redis** | Falls back to Parquet files in `data/features/` |
+| **Redpanda** | Logs events to stdout instead of publishing |
+| **Unknown user** | Uses average user features (cold-start fallback) |
+| **Missing model files** | Returns 503 with descriptive error |
+
+### Key Takeaways
+- **Stateless inference**: Models are loaded once at startup and shared across requests. No per-request training or Feast connection setup.
+- **Feature parity with training**: The derived features computed at inference time (`user_deviation`, `movie_popularity_log`, etc.) must exactly match the training pipeline's logic. Any discrepancy would cause silent prediction degradation.
+- **Cold-start handling**: Unknown users get average feature values (3.5 avg rating, 0 count, 0 stddev). Unknown movies are simply skipped during candidate ranking.
+- **Redpanda as optional**: The event producer degrades gracefully — if Redpanda isn't running, events are logged. This lets the API work in minimal dev mode without Docker.
+- **FastAPI lifespan**: Using the `lifespan` context manager for startup (model loading, service init) and shutdown (producer flush/close) instead of deprecated `@app.on_event`.
+
+### Manual Steps Required
+1. Ensure trained models exist: `python scripts/train_models.py`
+2. Ensure feature Parquet files exist: `python scripts/generate_feature_data.py`
+3. Start the API: `python scripts/run_api.py`
+4. Open docs: http://localhost:8000/docs
+5. (Optional) Start Redpanda for event streaming: `docker start redpanda`
+
+### Next Phase
+Phase 10 — Monitoring & Observability (Prometheus metrics + Grafana dashboards)
