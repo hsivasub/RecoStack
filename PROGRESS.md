@@ -417,3 +417,114 @@ Phase 9 — Serving API (FastAPI endpoints for `/recommend` and `/rate`)
 
 ### Next Phase
 Phase 10 — Monitoring & Observability (Prometheus metrics + Grafana dashboards)
+
+---
+
+## Phase 10 — Monitoring & Observability (Prometheus + Grafana)
+**Date**: 2026-09-23
+
+### Files Created
+- `src/api/metrics.py` — Prometheus metrics definitions (counters, histograms, gauges) + ASGI middleware + `/metrics` handler
+- `config/prometheus/prometheus.yml` — Prometheus scrape config (targets `host.docker.internal:8000` every 5s)
+- `docker/prometheus/Dockerfile` — Prometheus image with baked-in scrape config
+- `config/grafana/provisioning/datasources/prometheus.yml` — Auto-registers Prometheus datasource
+- `config/grafana/provisioning/dashboards/dashboards.yml` — Auto-loads dashboard JSON files
+- `config/grafana/dashboards/recostack-overview.json` — Pre-built Grafana dashboard (11 panels)
+- `docker/grafana/Dockerfile` — Grafana image with baked-in provisioning + dashboard
+
+### Files Modified (Metrics Instrumentation)
+- `src/api/app.py` — Added `PrometheusMiddleware`, `/metrics` endpoint, health gauges in lifespan, rate event counters
+- `src/api/recommend_service.py` — Added `RECOMMEND_LATENCY_SECONDS`, `RECOMMEND_CANDIDATES`, `RECOMMEND_RESULTS`, `RECOMMEND_ERRORS` instrumentation
+- `src/api/feature_service.py` — Added `FEATURE_LOOKUP_DURATION_SECONDS`, `FEATURE_LOOKUP_ERRORS` to all feature retrieval methods
+- `src/api/__init__.py` — Added `PrometheusMiddleware`, `metrics_endpoint` to public exports
+
+### Metrics Exported
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `recostack_http_requests_total` | Counter | method, endpoint, status | Total HTTP requests |
+| `recostack_http_request_duration_seconds` | Histogram | method, endpoint | Request latency (10 buckets, 5ms–10s) |
+| `recostack_recommend_latency_seconds` | Histogram | — | End-to-end recommend latency |
+| `recostack_recommend_candidates` | Histogram | — | SVD candidate count per request |
+| `recostack_recommend_results` | Histogram | — | Results returned (top-K) |
+| `recostack_recommend_errors_total` | Counter | reason | Recommendation errors |
+| `recostack_rate_events_total` | Counter | status | Rating events (published/logged/failed) |
+| `recostack_models_loaded` | Gauge | — | 0–2 (SVD + LightGBM) |
+| `recostack_models_ready` | Gauge | — | 1 if both models loaded |
+| `recostack_feast_available` | Gauge | — | 1 if Feast connected |
+| `recostack_redpanda_connected` | Gauge | — | 1 if Redpanda connected |
+| `recostack_feature_lookup_duration_seconds` | Histogram | entity_type | Feature retrieval latency |
+| `recostack_feature_lookup_errors_total` | Counter | entity_type | Feature lookup errors |
+
+### Grafana Dashboard (System Overview)
+The dashboard includes **11 panels** across 4 rows:
+
+| Row | Panel(s) |
+|-----|----------|
+| **Row 1** | HTTP Request Rate (by endpoint), HTTP Latency (p50/p95/p99), HTTP Error Rate |
+| **Row 2** | Recommendation Latency (p50/p95/p99), Candidate Count, Rate Events/sec |
+| **Row 3** | System Health stat (Models Ready), Feast Available stat, Redpanda Connected stat |
+| **Row 4** | Feature Lookup Latency (user vs. movie, p95), Recommendation Errors |
+
+### Architecture
+
+```
+┌──────────────┐    scrape :8000/metrics     ┌──────────────┐
+│  FastAPI      │ ◄─────────────────────────│  Prometheus   │
+│  (:8000)      │                             │  (:9090)      │
+│  ┌──────────┐ │                             └──────┬───────┘
+│  │ Metrics  │ │                                    │
+│  │ Module   │ │                            query    │
+│  └──────────┘ │                                    ▼
+└──────────────┘                             ┌──────────────┐
+                                             │   Grafana    │
+                                             │  (:3000)     │
+                                             │  admin/admin │
+                                             └──────────────┘
+```
+
+### How to Run
+```bash
+# 1. Start the FastAPI API
+python scripts/run_api.py
+
+# 2. Start Prometheus (in a second terminal)
+docker build -t recostack-prometheus -f docker/prometheus/Dockerfile .
+docker run -d --name prometheus -p 9090:9090 recostack-prometheus
+
+# 3. Start Grafana
+docker build -t recostack-grafana -f docker/grafana/Dockerfile .
+docker run -d --name grafana -p 3000:3000 recostack-grafana
+
+# 4. Open dashboards
+start http://localhost:3000  (admin/admin → RecoStack folder → System Overview)
+start http://localhost:9090  (Prometheus expression browser)
+start http://localhost:8000/metrics  (raw metrics)
+```
+
+### Usage
+```bash
+# Generate traffic for the dashboards
+curl http://localhost:8000/health
+curl "http://localhost:8000/recommend?user_id=1&top_k=5"
+curl -X POST http://localhost:8000/rate -H "Content-Type: application/json" -d "{\"user_id\":1,\"movie_id\":42,\"rating\":4.5}"
+
+# Query Prometheus directly
+curl "http://localhost:9090/api/v1/query?query=recostack_models_ready"
+```
+
+### Key Takeaways
+- **Three observation planes**: (1) Raw metrics endpoint (`/metrics`) for curl-level debugging, (2) Prometheus for time-series storage and ad-hoc querying, (3) Grafana for persistent visualized dashboards.
+- **Histogram buckets were chosen deliberately**: 5ms–10s for HTTP latency (captures both healthy <50ms requests and slow cold-starts), 1–200 for candidates (SVD returns exactly 100), 1–100 for results (top-K caps at 100).
+- **Health gauges are set once at startup** (models loaded, Feast, Redpanda). They update only on restart — live health changes would require a background health-check loop.
+- **Prometheus on Windows**: Uses `host.docker.internal:8000` instead of `localhost:8000` because Prometheus runs inside a container and needs to reach the host. This is a Windows Docker Desktop pattern.
+- **Grafana auto-provisioning**: Datasource and dashboard YAML configs are baked into the image so the dashboard is ready on first load — no manual "Add datasource" or "Import JSON" steps.
+- **Docker Compose (Phase 11)** will wire the networking between FastAPI, Prometheus, and Grafana automatically, removing the need for manual container runs.
+
+### Manual Steps Required
+1. Run `docker build` and `docker run` for Prometheus and Grafana (or wait for Phase 11 Docker Compose)
+2. Generate traffic to populate the dashboards (curl commands above)
+3. Open Grafana at http://localhost:3000 (admin/admin)
+
+### Next Phase
+Phase 11 — Docker Compose Orchestration (wire all 6+ services together)

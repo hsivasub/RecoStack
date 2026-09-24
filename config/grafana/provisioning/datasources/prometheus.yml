@@ -1,0 +1,17 @@
+# Grafana Datasource Provisioning — RecoStack
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#datasources
+#
+# Automatically registers Prometheus as a datasource on startup.
+# Uses Docker Compose service name "prometheus" for host resolution.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    uid: recostack-prometheus

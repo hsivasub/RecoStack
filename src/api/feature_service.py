@@ -13,6 +13,7 @@ The service auto-detects which backend is available and falls back gracefully.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ import pandas as pd
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.api.metrics import FEATURE_LOOKUP_DURATION_SECONDS, FEATURE_LOOKUP_ERRORS
 
 FEAST_REPO_PATH = PROJECT_ROOT / "config" / "feast"
 FEATURES_DIR = PROJECT_ROOT / "data" / "features"
@@ -94,9 +97,20 @@ class FeatureService:
         Returns a dict of feature_name -> value, or an empty dict if the
         user is unknown (cold-start).
         """
-        if self._feast_available and self._store is not None:
-            return self._get_user_features_feast(user_id)
-        return self._get_user_features_parquet(user_id)
+        start = time.monotonic()
+        try:
+            if self._feast_available and self._store is not None:
+                result = self._get_user_features_feast(user_id)
+            else:
+                result = self._get_user_features_parquet(user_id)
+            return result
+        except Exception:
+            FEATURE_LOOKUP_ERRORS.labels(entity_type="user").inc()
+            return {}
+        finally:
+            FEATURE_LOOKUP_DURATION_SECONDS.labels(entity_type="user").observe(
+                time.monotonic() - start
+            )
 
     def get_movie_features(self, movie_id: int) -> dict[str, float]:
         """
@@ -105,9 +119,20 @@ class FeatureService:
         Returns a dict of feature_name -> value, or an empty dict if the
         movie is unknown (cold-start).
         """
-        if self._feast_available and self._store is not None:
-            return self._get_movie_features_feast(movie_id)
-        return self._get_movie_features_parquet(movie_id)
+        start = time.monotonic()
+        try:
+            if self._feast_available and self._store is not None:
+                result = self._get_movie_features_feast(movie_id)
+            else:
+                result = self._get_movie_features_parquet(movie_id)
+            return result
+        except Exception:
+            FEATURE_LOOKUP_ERRORS.labels(entity_type="movie").inc()
+            return {}
+        finally:
+            FEATURE_LOOKUP_DURATION_SECONDS.labels(entity_type="movie").observe(
+                time.monotonic() - start
+            )
 
     def get_movies_batch(self, movie_ids: list[int]) -> pd.DataFrame:
         """
@@ -115,17 +140,35 @@ class FeatureService:
 
         Returns a DataFrame with movie_id as the index and feature columns.
         """
-        if self._movie_df is not None:
-            mask = self._movie_df["movie_id"].isin(movie_ids)
-            return self._movie_df[mask].set_index("movie_id")
-        return pd.DataFrame()
+        start = time.monotonic()
+        try:
+            if self._movie_df is not None:
+                mask = self._movie_df["movie_id"].isin(movie_ids)
+                return self._movie_df[mask].set_index("movie_id")
+            return pd.DataFrame()
+        except Exception:
+            FEATURE_LOOKUP_ERRORS.labels(entity_type="movie").inc()
+            return pd.DataFrame()
+        finally:
+            FEATURE_LOOKUP_DURATION_SECONDS.labels(entity_type="movie").observe(
+                time.monotonic() - start
+            )
 
     def get_user_features_batch(self, user_ids: list[int]) -> pd.DataFrame:
         """Retrieve user features for a batch of user IDs."""
-        if self._user_df is not None:
-            mask = self._user_df["user_id"].isin(user_ids)
-            return self._user_df[mask].set_index("user_id")
-        return pd.DataFrame()
+        start = time.monotonic()
+        try:
+            if self._user_df is not None:
+                mask = self._user_df["user_id"].isin(user_ids)
+                return self._user_df[mask].set_index("user_id")
+            return pd.DataFrame()
+        except Exception:
+            FEATURE_LOOKUP_ERRORS.labels(entity_type="user").inc()
+            return pd.DataFrame()
+        finally:
+            FEATURE_LOOKUP_DURATION_SECONDS.labels(entity_type="user").observe(
+                time.monotonic() - start
+            )
 
     # ------------------------------------------------------------------
     # Feast backend

@@ -1,0 +1,17 @@
+# Grafana Dashboard Provisioning — RecoStack
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+#
+# Loads dashboard JSON files from the dashboards directory on startup.
+
+apiVersion: 1
+
+providers:
+  - name: "RecoStack"
+    orgId: 1
+    folder: "RecoStack"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/provisioning/dashboards

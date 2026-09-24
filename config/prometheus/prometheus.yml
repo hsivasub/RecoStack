@@ -1,0 +1,28 @@
+# Prometheus Configuration — RecoStack
+#
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+#
+# Scrapes the FastAPI serving API for metrics every 5 seconds.
+# Uses Docker Compose service names for host resolution.
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # ---------------------------------------------------------------
+  # FastAPI Serving API
+  # ---------------------------------------------------------------
+  - job_name: "recostack-api"
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: "recostack-api"
+          component: "serving"
+
+  # ---------------------------------------------------------------
+  # Prometheus self-monitoring
+  # ---------------------------------------------------------------
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

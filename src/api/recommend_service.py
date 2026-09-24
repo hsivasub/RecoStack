@@ -13,6 +13,7 @@ then orchestrates the two-stage recommendation pipeline for a single user:
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.api.feature_service import FeatureService
+from src.api.metrics import (
+    FEATURE_LOOKUP_DURATION_SECONDS,
+    FEATURE_LOOKUP_ERRORS,
+    RECOMMEND_CANDIDATES,
+    RECOMMEND_ERRORS,
+    RECOMMEND_LATENCY_SECONDS,
+    RECOMMEND_RESULTS,
+)
 from src.recommenders.candidate_generation import SVDCandidateGenerator
 from src.recommenders.ranking import LightGBMRanker
 
@@ -108,7 +117,10 @@ class RecommendService:
         Returns:
             List of dicts with keys: movie_id, title, genres, score.
         """
+        start_time = time.monotonic()
+
         if self.svd is None or self.ranker is None or self.features is None:
+            RECOMMEND_ERRORS.labels(reason="models_not_loaded").inc()
             raise RuntimeError(
                 "Models not loaded. Call initialize() before recommend()."
             )
@@ -116,9 +128,17 @@ class RecommendService:
         # ------------------------------------------------------------------
         # Stage 1: Candidate generation via SVD
         # ------------------------------------------------------------------
-        candidates = self.svd.get_candidates(user_id, n_candidates=100)
+        try:
+            candidates = self.svd.get_candidates(user_id, n_candidates=100)
+        except Exception:
+            RECOMMEND_ERRORS.labels(reason="svd_candidate_generation").inc()
+            raise
+
         if not candidates:
+            RECOMMEND_LATENCY_SECONDS.observe(time.monotonic() - start_time)
             return []
+
+        RECOMMEND_CANDIDATES.observe(len(candidates))
 
         # ------------------------------------------------------------------
         # Stage 2: Feature assembly & ranking
@@ -127,6 +147,7 @@ class RecommendService:
         # Fetch movie features for all candidates
         movie_features = self.features.get_movies_batch(candidates)
         if movie_features.empty:
+            RECOMMEND_LATENCY_SECONDS.observe(time.monotonic() - start_time)
             return []
 
         # Fetch user features
@@ -175,13 +196,18 @@ class RecommendService:
             feature_rows.append((mid, row))
 
         if not feature_rows:
+            RECOMMEND_LATENCY_SECONDS.observe(time.monotonic() - start_time)
             return []
 
         mids = [fr[0] for fr in feature_rows]
         feature_df = pd.DataFrame([fr[1] for fr in feature_rows])
 
         # Score with LightGBM
-        scores = self.ranker.predict(feature_df)
+        try:
+            scores = self.ranker.predict(feature_df)
+        except Exception:
+            RECOMMEND_ERRORS.labels(reason="lgbm_prediction").inc()
+            raise
 
         # Sort by score descending
         ranked_indices = np.argsort(-scores)
@@ -197,6 +223,10 @@ class RecommendService:
                 "genres": movie_info.get("genres", ""),
                 "score": round(score, 4),
             })
+
+        # Record metrics
+        RECOMMEND_RESULTS.observe(len(results))
+        RECOMMEND_LATENCY_SECONDS.observe(time.monotonic() - start_time)
 
         return results
 

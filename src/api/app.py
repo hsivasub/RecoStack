@@ -24,11 +24,18 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from fastapi import FastAPI, HTTPException, Query
 
 from src.api.event_producer import EventProducer
+from src.api.metrics import (
+    FEAST_AVAILABLE,
+    MODELS_LOADED,
+    MODELS_READY,
+    PrometheusMiddleware,
+    RATE_EVENTS_TOTAL,
+    REDPANDA_CONNECTED,
+)
 from src.api.models import (
     HealthResponse,
     RatingEvent,
     RatingResponse,
-    RecommendRequest,
     RecommendResponse,
 )
 from src.api.recommend_service import RecommendService
@@ -46,12 +53,24 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
     # --- Startup ---
     print("=" * 60)
-    print("RecoStack — Serving API (Phase 9)")
+    print("RecoStack — Serving API (Phase 9 + Phase 10 Monitoring)")
     print("=" * 60)
     recommend_service.initialize()
     event_producer.initialize()
+
+    # Set Prometheus health gauges
+    MODELS_LOADED.set(2 if recommend_service.is_ready else 0)
+    MODELS_READY.set(1 if recommend_service.is_ready else 0)
+    FEAST_AVAILABLE.set(
+        1
+        if recommend_service.features and recommend_service.features.feast_available
+        else 0
+    )
+    REDPANDA_CONNECTED.set(1 if event_producer.is_connected else 0)
+
     print("\n✓ API ready at http://localhost:8000")
     print("  Docs: http://localhost:8000/docs")
+    print("  Metrics: http://localhost:8000/metrics")
     print("=" * 60)
     yield
     # --- Shutdown ---
@@ -65,6 +84,22 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Add Prometheus middleware (records HTTP request count & latency)
+app.add_middleware(PrometheusMiddleware)
+
+
+# ---------------------------------------------------------------------------
+# Metrics endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint (scraped by Prometheus server)."""
+    from starlette.responses import Response
+    from prometheus_client import generate_latest
+    return Response(content=generate_latest(), media_type="text/plain; charset=utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +172,15 @@ async def rate(event: RatingEvent):
     )
 
     if not success:
+        RATE_EVENTS_TOTAL.labels(status="failed").inc()
         raise HTTPException(
             status_code=502,
             detail="Failed to publish rating event to Redpanda",
         )
+
+    # Record event status based on Redpanda connectivity
+    status = "published" if event_producer.is_connected else "logged"
+    RATE_EVENTS_TOTAL.labels(status=status).inc()
 
     return RatingResponse(
         status="ok",
