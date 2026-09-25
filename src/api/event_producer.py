@@ -6,17 +6,22 @@ event to the `user-events` Redpanda topic so downstream consumers (feature
 pipelines, analytics) can process it in real time.
 
 Gracefully degrades if Redpanda is not running — logs a warning and continues.
+
+Environment variables:
+    REDPANDA_BOOTSTRAP_SERVERS: Redpanda broker address (default: localhost:9092)
+    REDPANDA_TOPIC: Topic name for user events (default: user-events)
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from typing import Any
 
-REDPANDA_TOPIC = "user-events"
-REDPANDA_BOOTSTRAP_SERVERS = "localhost:9092"
+REDPANDA_TOPIC = os.getenv("REDPANDA_TOPIC", "user-events")
+REDPANDA_BOOTSTRAP_SERVERS = os.getenv("REDPANDA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 
 class EventProducer:

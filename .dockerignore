@@ -1,0 +1,40 @@
+# RecoStack — .dockerignore
+#
+# Excludes unnecessary files from Docker build context
+# to keep images small and builds fast.
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+*.egg/
+
+# Data (large, mounted at runtime)
+data/raw/
+data/features/
+data/feast/
+data/training/
+data/mlflow/
+
+# IDE & editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose*.yaml
+
+# Docs & logs
+mlruns/
+PROGRESS.md

@@ -1,0 +1,25 @@
+# RecoStack — Docker Compose Development Override
+#
+# Extends docker-compose.yaml for local development.
+# Enables hot-reload and mounts the source tree for live code changes.
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+
+services:
+  # ---------------------------------------------------------------------------
+  # FastAPI — development mode with hot-reload
+  # ---------------------------------------------------------------------------
+  recostack-api:
+    build:
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the entire project for live code reload
+      - type: bind
+        source: ./
+        target: /app
+      # Preserve installed packages (don't shadow with host .venv)
+      - /app/.venv
+    command: ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

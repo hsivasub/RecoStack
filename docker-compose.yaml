@@ -1,0 +1,212 @@
+# RecoStack — Docker Compose (Production / Full Stack)
+#
+# Orchestrates all 7 services: Redpanda, Redis, MLflow, FastAPI,
+# Prometheus, and Grafana.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#
+# First-time setup (run outside compose):
+#   1. python scripts/generate_feature_data.py
+#   2. python scripts/train_models.py
+#
+# URLs:
+#   API:        http://localhost:8000/docs
+#   MLflow:     http://localhost:5000
+#   Prometheus: http://localhost:9090
+#   Grafana:    http://localhost:3000  (admin/admin)
+
+volumes:
+  redpanda-data:
+    name: recostack-redpanda-data
+  mlflow-data:
+    name: recostack-mlflow-data
+  redis-data:
+    name: recostack-redis-data
+  prometheus-data:
+    name: recostack-prometheus-data
+  grafana-data:
+    name: recostack-grafana-data
+
+networks:
+  recostack:
+    name: recostack
+    driver: bridge
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Redpanda — message broker (Kafka API–compatible)
+  # ---------------------------------------------------------------------------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: recostack-redpanda
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - recostack
+    command:
+      - redpanda
+      - start
+      - --mode dev-container
+      - --check=false
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info", "--brokers", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # 2. Redpanda topic initializer (one-shot setup)
+  # ---------------------------------------------------------------------------
+  init-topics:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: recostack-init-topics
+    networks:
+      - recostack
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo "Creating topics ..."
+        rpk topic create user-events \
+          --brokers redpanda:9092 \
+          --partitions 3 \
+          --replicas 1
+        echo "Topic created. Listing topics:"
+        rpk topic list --brokers redpanda:9092
+        echo "Done."
+
+  # ---------------------------------------------------------------------------
+  # 3. Redis — online feature cache for Feast
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: recostack-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - recostack
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # 4. MLflow — experiment tracking & model registry
+  # ---------------------------------------------------------------------------
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/mlflow/Dockerfile
+    image: recostack-mlflow
+    container_name: recostack-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - recostack
+    environment:
+      MLFLOW_BACKEND_STORE_URI: sqlite:///mlflow/mlflow.db
+      MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
+      MLFLOW_HOST: 0.0.0.0
+      MLFLOW_PORT: 5000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # 5. FastAPI — recommendation serving API
+  # ---------------------------------------------------------------------------
+  recostack-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: recostack-api
+    container_name: recostack-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount model artifacts and feature data as read-only
+      - type: bind
+        source: ./data/model-artifacts
+        target: /app/data/model-artifacts
+        read_only: true
+      - type: bind
+        source: ./data/features
+        target: /app/data/features
+        read_only: true
+      - type: bind
+        source: ./data/raw
+        target: /app/data/raw
+        read_only: true
+    networks:
+      - recostack
+    environment:
+      # Redpanda hostname (Docker Compose service name, not localhost)
+      REDPANDA_BOOTSTRAP_SERVERS: redpanda:9092
+      # Python unbuffered output for Docker logs
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      redpanda:
+        condition: service_started
+      init-topics:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 6. Prometheus — metrics collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    build:
+      context: .
+      dockerfile: docker/prometheus/Dockerfile
+    image: recostack-prometheus
+    container_name: recostack-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - recostack
+    depends_on:
+      - recostack-api
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 7. Grafana — dashboards & visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    build:
+      context: .
+      dockerfile: docker/grafana/Dockerfile
+    image: recostack-grafana
+    container_name: recostack-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - recostack
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    restart: unless-stopped

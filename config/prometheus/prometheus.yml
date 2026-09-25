@@ -11,14 +11,25 @@ global:
 
 scrape_configs:
   # ---------------------------------------------------------------
-  # FastAPI Serving API
+  # FastAPI Serving API (Docker Compose — uses service name)
   # ---------------------------------------------------------------
   - job_name: "recostack-api"
+    static_configs:
+      - targets: ["recostack-api:8000"]
+        labels:
+          service: "recostack-api"
+          component: "serving"
+
+  # ---------------------------------------------------------------
+  # FastAPI Serving API (standalone fallback — Windows Docker Desktop)
+  # ---------------------------------------------------------------
+  - job_name: "recostack-api-standalone"
     static_configs:
       - targets: ["host.docker.internal:8000"]
         labels:
           service: "recostack-api"
           component: "serving"
+          mode: "standalone"
 
   # ---------------------------------------------------------------
   # Prometheus self-monitoring

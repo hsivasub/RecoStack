@@ -528,3 +528,125 @@ curl "http://localhost:9090/api/v1/query?query=recostack_models_ready"
 
 ### Next Phase
 Phase 11 — Docker Compose Orchestration (wire all 6+ services together)
+
+---
+
+## Phase 11 — Docker Compose Orchestration
+**Date**: 2026-09-25
+
+### Files Created
+- `docker/Dockerfile` — FastAPI serving image (Python 3.12-slim, installs `.[serving,monitoring,streaming]`)
+- `docker-compose.yaml` — Production compose: 7 services (Redpanda, init-topics, Redis, MLflow, FastAPI, Prometheus, Grafana)
+- `docker-compose.dev.yaml` — Dev override: hot-reload mode with source mount and `/app/.venv` exclusion
+- `.dockerignore` — Excludes `__pycache__`, `.venv`, data blobs, IDE files, docs from build context
+
+### Files Modified
+- `src/api/event_producer.py` — `REDPANDA_BOOTSTRAP_SERVERS` and `REDPANDA_TOPIC` now read from environment variables (fallback to `localhost:9092` / `user-events`)
+- `config/prometheus/prometheus.yml` — Added `recostack-api:8000` target for Docker Compose networking; keeps `host.docker.internal:8000` as standalone fallback
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Docker Compose Network                        │
+│                       (recostack bridge)                         │
+│                                                                  │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ Redpanda │    │  Redis   │    │  MLflow  │    │ FastAPI  │  │
+│  │ :9092    │    │ :6379    │    │ :5000    │    │ :8000    │  │
+│  │ :9644    │    └──────────┘    └──────────┘    └──────────┘  │
+│  └────┬─────┘                                                   │
+│       │                                                          │
+│  ┌────▼─────┐                              ┌──────────┐         │
+│  │init-topics│                              │Prometheus│         │
+│  │(one-shot) │                              │ :9090    │         │
+│  └───────────┘                              └────┬─────┘         │
+│                                                   │              │
+│                                            ┌──────▼──────┐      │
+│                                            │   Grafana   │      │
+│                                            │   :3000     │      │
+│                                            └─────────────┘      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Services Table
+
+| Service | Container Name | Image | Ports | Depends On |
+|---------|---------------|-------|-------|------------|
+| `redpanda` | recostack-redpanda | `redpandadata/redpanda:latest` | 9092, 9644 | — |
+| `init-topics` | recostack-init-topics | `redpandadata/redpanda:latest` | — | redpanda (healthy) |
+| `redis` | recostack-redis | `redis:7-alpine` | 6379 | — |
+| `mlflow` | recostack-mlflow | `recostack-mlflow` (build) | 5000 | — |
+| `recostack-api` | recostack-api | `recostack-api` (build) | 8000 | redpanda, init-topics, redis |
+| `prometheus` | recostack-prometheus | `recostack-prometheus` (build) | 9090 | recostack-api |
+| `grafana` | recostack-grafana | `recostack-grafana` (build) | 3000 | prometheus |
+
+### Networking Strategy
+
+| Concern | Solution |
+|---------|----------|
+| **Cross-service resolution** | Docker Compose `networks: recostack` bridge — services resolve each other by service name |
+| **Redpanda from container** | `REDPANDA_BOOTSTRAP_SERVERS=redpanda:9092` (not `localhost`) |
+| **Prometheus scrape target** | `recostack-api:8000` inside compose; `host.docker.internal:8000` fallback for standalone runs |
+| **FastAPI data access** | Bind mounts for `data/model-artifacts/`, `data/features/`, `data/raw/` (read-only) |
+| **Persistent volumes** | Named volumes for Redpanda, Redis, MLflow, Prometheus, Grafana data |
+
+### Development vs Production
+
+| Aspect | Production (`docker compose up`) | Development (`docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up`) |
+|--------|-------------------------------|--------------------------------------------------------------|
+| **Code reload** | No (static build) | Yes (`--reload` flag) |
+| **Source mount** | Only data dirs | Entire project root |
+| **Build context** | `.dockerignore` filters blobs | Same (but bind-mount overrides) |
+| **Restart policy** | `unless-stopped` | None |
+| **Ports** | All exposed | Same |
+
+### Usage
+
+```bash
+# Prerequisites: generate features & train models first
+python scripts/generate_feature_data.py
+python scripts/train_models.py
+
+# Build and start all services
+docker compose up -d
+
+# Watch logs
+docker compose logs -f
+
+# Check service status
+docker compose ps
+
+# Verify health
+curl http://localhost:8000/health
+curl http://localhost:8000/recommend?user_id=1&top_k=5
+curl http://localhost:9090/api/v1/query?query=recostack_models_ready
+
+# Tear down
+docker compose down
+
+# Dev mode with hot-reload
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+```
+
+### Key Takeaways
+
+- **Service naming matters**: Docker Compose creates DNS entries using service names (e.g., `redpanda`, `redis`, `recostack-api`). Containers must use these names, not `localhost`, to reach each other. This is why `RECONPANDA_BOOTSTRAP_SERVERS` is configurable via environment variable rather than hardcoded.
+- **init-topics pattern**: A separate one-shot container that runs `rpk topic create` after Redpanda is healthy, then exits. This is cleaner than embedding topic creation in the Redpanda config or using a startup script.
+- **Healthchecks prevent race conditions**: Redpanda healthcheck waits for `rpk cluster info` to succeed; Redis checks `redis-cli ping`; MLflow checks its `/health` endpoint. Services depend on `condition: service_healthy` or `service_completed_successfully`.
+- **Bind mounts for data, volumes for state**: Model artifacts and feature Parquet files are bind-mounted (read-only) because they're generated on the host. Database directories (Redis, Prometheus, Grafana) use named volumes for persistence.
+- **`.dockerignore` is crucial**: The `data/raw/` directory (100K+ CSV rows), `.venv` (hundreds of MB), `__pycache__`, and `mlruns/` are excluded from the Docker build context. Without this, `docker compose build` would take minutes instead of seconds.
+- **`docker-compose.dev.yaml`** follows the standard Compose override pattern: `-f` flags let you layer dev-specific settings (hot-reload, source mounts) on top of the production base file without duplicating it.
+
+### Manual Steps Required
+1. Run `python scripts/generate_feature_data.py` and `python scripts/train_models.py` (if not done already)
+2. Run `docker compose up -d` to start all services
+3. Verify with `curl http://localhost:8000/health`
+4. Open dashboards: API at http://localhost:8000/docs, MLflow at http://localhost:5000, Grafana at http://localhost:3000
+
+### What's Next
+The core RecoStack platform is complete! Possible next steps:
+- **Integration tests**: `tests/integration/` for end-to-end pipeline tests
+- **CI/CD**: GitHub Actions workflow for lint, test, build
+- **Additional models**: Neural candidate generation (two-tower), content-based filtering
+- **AB test framework**: Shadow mode / A/B comparison between model versions
