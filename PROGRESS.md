@@ -646,7 +646,65 @@ docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 
 ### What's Next
 The core RecoStack platform is complete! Possible next steps:
-- **Integration tests**: `tests/integration/` for end-to-end pipeline tests
 - **CI/CD**: GitHub Actions workflow for lint, test, build
 - **Additional models**: Neural candidate generation (two-tower), content-based filtering
 - **AB test framework**: Shadow mode / A/B comparison between model versions
+
+---
+
+## Phase 12 — Unit & Integration Tests
+**Date**: 2026-09-29
+
+### Files Created
+- `tests/conftest.py` — Shared pytest fixtures (synthetic ratings, user/movie features, training data, movies CSV)
+- `tests/unit/test_models.py` — 18 tests for Pydantic models (validation, boundaries, defaults)
+- `tests/unit/test_candidate_generation.py` — 10 tests for SVD (fit, embeddings, mappings, candidates, cold-start, serialization)
+- `tests/unit/test_ranking.py` — 8 tests for LightGBM (fit, predict, rank, feature importance, serialization, auto-feature detection)
+- `tests/unit/test_event_producer.py` — 7 tests for EventProducer (fallback, logging, event schema, mock KafkaProducer)
+- `tests/unit/test_feature_service.py` — 7 tests for FeatureService (fallback, unknown entities, Parquet loading)
+- `tests/unit/test_recommend_service.py` — 6 tests for RecommendService (no-models, movie lookup, mocked full flow)
+- `tests/unit/test_metrics.py` — 14 tests for Prometheus metrics (all 13 metrics register, increment, and appear in output)
+- `tests/integration/test_api.py` — 12 tests for FastAPI endpoints (health, metrics, recommend, rate, docs, OpenAPI schema)
+- `tests/integration/test_training_pipeline.py` — 5 tests for training pipeline (feature prep, split ratio, NaN handling, time-based split, config)
+
+### Files Modified
+- `pyproject.toml` — Added `[tool.pytest.ini_options]` with test paths, pythonpath, warning filters, and markers
+- `src/api/__init__.py` — Fixed stray indentation error that broke all imports
+
+### Test Coverage Summary
+
+| Module | Tests | What's Covered |
+|--------|-------|----------------|
+| `models.py` | 18 | All Pydantic schemas: validation, boundaries, defaults, response structure |
+| `candidate_generation.py` | 10 | Fit, embeddings shape, mappings, global mean, candidate retrieval, cold-start, exclusion, serialization, normalization |
+| `ranking.py` | 8 | Fit, predict, rank, feature importance, save/load roundtrip, auto-feature detection |
+| `event_producer.py` | 7 | Fallback init, disconnected send, timestamp, event JSON schema, close, mock KafkaProducer |
+| `feature_service.py` | 7 | No-Feast fallback, unknown user/movie, empty batch, Parquet loading with temp files |
+| `recommend_service.py` | 6 | No-models init, pre-condition check, movie lookup, mocked full recommend flow |
+| `metrics.py` | 14 | All 13 metric types register, increment, and appear in `generate_latest()` output |
+| `test_api.py` (integration) | 12 | Health, metrics, recommend (503/422), rate (200/422), docs, OpenAPI schema |
+| `test_training_pipeline.py` (integration) | 5 | Feature prep, split ratio, NaN dropping, time-based split, config defaults |
+
+### Key Takeaways
+- **73 unit tests** across 7 test files covering all core modules. **17 integration tests** across 2 files covering API endpoints and pipeline logic.
+- **SVD n_factors constraint**: The number of latent factors must be `< min(n_users, n_items)`. The test uses `n_factors=2` for a 3×4 matrix. This is a scikit-learn TruncatedSVD requirement.
+- **numpy int64 vs Python int**: `SVDCandidateGenerator.get_candidates()` returns `np.int64` values from `reverse_item_map`. Tests check `isinstance(mid, (int, np.integer))` instead of `isinstance(mid, int)`.
+- **conftest.py pattern**: Shared fixtures (`sample_ratings`, `sample_training_data`, etc.) are defined once in `tests/conftest.py` and auto-discovered by pytest. No imports needed in individual test files.
+- **Mock-based testing**: `EventProducer` and `RecommendService` tests use `unittest.mock` to simulate KafkaProducer and model behavior without requiring running services or trained model files.
+- **FastAPI TestClient**: Integration tests use `fastapi.testclient.TestClient` for in-process HTTP testing without a live uvicorn server.
+- **pytest config in pyproject.toml**: `pythonpath = ["src"]` lets tests import `src.api.*` and `src.recommenders.*` directly without `sys.path` manipulation.
+
+### Manual Steps Required
+```bash
+# Run all unit tests
+pytest tests/unit/ -v
+
+# Run all integration tests
+pytest tests/integration/ -v
+
+# Run all tests with coverage
+pytest --cov=src tests/
+
+# Run only fast tests (exclude integration)
+pytest -m "not integration" tests/
+```

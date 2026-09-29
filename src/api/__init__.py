@@ -31,5 +31,3 @@ __all__ = [
     "PrometheusMiddleware",
     "metrics_endpoint",
 ]
-    "MovieInfo",
-]
