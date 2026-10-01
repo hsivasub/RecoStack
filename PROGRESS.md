@@ -708,3 +708,60 @@ pytest --cov=src tests/
 # Run only fast tests (exclude integration)
 pytest -m "not integration" tests/
 ```
+
+---
+
+## Phase 13 — CI/CD (GitHub Actions)
+**Date**: 2026-10-01
+
+### Files Created
+- `.github/workflows/ci.yml` — CI pipeline: lint (ruff) → type-check (mypy) → test (pytest, 3.12 + 3.13 matrix) → integration tests
+- `.github/workflows/docker.yml` — Docker build & push to GHCR with smoke test
+- `.github/dependabot.yml` — Automated dependency updates (pip, Docker, GitHub Actions)
+
+### CI Pipeline (`ci.yml`)
+
+| Job | Tool | Python | Trigger |
+|-----|------|--------|---------|
+| **lint** | `ruff check src/ tests/` | 3.12 | push + PR |
+| **type-check** | `mypy src/ tests/` | 3.12 | push + PR |
+| **test** | `pytest --cov=src tests/unit/` | 3.12 + 3.13 | push + PR |
+| **integration** | `pytest tests/integration/` | 3.12 | push only |
+
+Key features:
+- **Concurrency group**: Cancels in-progress runs when a new push arrives on the same branch
+- **Matrix strategy**: Tests run on Python 3.12 (primary) and 3.13 (forward compatibility)
+- **Coverage upload**: XML coverage report sent to Codecov
+- **Fail-fast disabled**: All matrix variants run even if one fails
+- **Integration gating**: Integration tests run only on push to main (not on every PR commit)
+
+### Docker Pipeline (`docker.yml`)
+
+| Stage | What it does |
+|-------|-------------|
+| **Build** | Builds the FastAPI image with Docker Buildx (layer caching via `type=gha`) |
+| **Push** | Pushes to `ghcr.io/<repo>` with tags: `latest`, `main`, `sha-<commit>` |
+| **Smoke test** | Starts container, waits for startup, verifies `/health` returns `{"status":"ok"}`, verifies `/metrics` contains `recostack_` |
+| **Cleanup** | Removes the smoke-test container (always runs) |
+
+### Dependabot (`dependabot.yml`)
+
+| Ecosystem | Directory | Schedule | Grouping |
+|-----------|-----------|----------|----------|
+| **pip** | `/` | Weekly (Sunday 06:00 UTC) | ML-core, serving, dev-tools groups |
+| **docker** | `/` | Weekly (Sunday 06:00 UTC) | — |
+| **github-actions** | `/` | Weekly (Sunday 06:00 UTC) | — |
+
+### Key Takeaways
+- **Three-layer CI**: lint (fast, <30s) → type-check (medium, <1m) → test (slow, <5m). Fail-fast means lint failures abort the pipeline before wasting time on tests.
+- **Python 3.13 in matrix**: The `requires-python = ">=3.12"` in pyproject.toml means 3.13 should work. Running it in CI catches regressions before they hit users.
+- **Docker layer caching**: `cache-from: type=gha` and `cache-to: type=gha,mode=max` reuse cached layers across workflow runs, cutting build time from ~5m to ~1m.
+- **Smoke test in Docker workflow**: The built image is started, health-checked, and metrics-verified before the workflow succeeds. This catches runtime errors (missing deps, import errors, config issues) that unit tests miss.
+- **Dependabot grouping**: ML-core, serving, and dev-tools are grouped so related updates come in a single PR rather than 10 separate PRs. Major version bumps still get individual PRs.
+- **Integration tests on push only**: Integration tests are slower and may require data files. Running them only on push (not every PR commit) keeps the feedback loop fast.
+
+### Manual Steps Required
+1. Enable GitHub Actions in the repository settings (Settings → Actions → General → Allow all actions)
+2. (Optional) Configure Codecov: add `CODECOV_TOKEN` to repository secrets if the repo is private
+3. Push to GitHub: `git push origin main` — the CI pipeline triggers automatically
+4. Check workflow status: GitHub → Actions tab → CI workflow

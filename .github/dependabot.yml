@@ -1,0 +1,86 @@
+# RecoStack — Dependabot Configuration
+#
+# Keeps dependencies up-to-date automatically.
+# Runs weekly on Sunday and creates PRs for updates.
+
+version: 2
+updates:
+  # ---------------------------------------------------------------
+  # Python (pip) — pyproject.toml
+  # ---------------------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    groups:
+      ml-core:
+        patterns:
+          - "scikit-learn"
+          - "lightgbm"
+          - "numpy"
+          - "scipy"
+          - "pandas"
+        update-types:
+          - "minor"
+          - "patch"
+      serving:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "pydantic"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-tools:
+        patterns:
+          - "pytest*"
+          - "mypy"
+          - "ruff"
+          - "pre-commit"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---------------------------------------------------------------
+  # Docker — all Dockerfiles
+  # ---------------------------------------------------------------
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"
+
+  # ---------------------------------------------------------------
+  # GitHub Actions — workflow files
+  # ---------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
